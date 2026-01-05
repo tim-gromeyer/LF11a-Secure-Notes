@@ -59,5 +59,16 @@ def get_notes(user: str = Depends(authenticate), db: sqlite3.Connection = Depend
     cursor.execute("SELECT id, content FROM notes WHERE user = ?", (user,))
     return [{"id": row[0], "content": row[1]} for row in cursor.fetchall()]
 
+@app.delete("/notes/{note_id}", tags=["Notizen"])
+def delete_note(note_id: int, user: str = Depends(authenticate), db: sqlite3.Connection = Depends(get_db)):
+    """Löscht eine Notiz, sofern sie dem angemeldeten Benutzer gehört (Berechtigungsprüfung)."""
+    cursor = db.cursor()
+    # WICHTIG: Prüfung auf 'user', damit niemand fremde Notizen löscht!
+    cursor.execute("DELETE FROM notes WHERE id = ? AND user = ?", (note_id, user))
+    if cursor.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Notiz nicht gefunden oder keine Berechtigung")
+    db.commit()
+    return {"status": "success", "message": f"Notiz {note_id} gelöscht"}
+
 # Statische Dateien (Frontend) mounten
 app.mount("/static", StaticFiles(directory="static"), name="static")
