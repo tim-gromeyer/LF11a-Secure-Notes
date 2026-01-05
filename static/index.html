@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Secure Notes Dashboard - LF11a</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.6; }
+        .note { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; background: #f9f9f9; }
+        h1 { color: #2c3e50; }
+        button { background: #3498db; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 3px; }
+        input { padding: 10px; width: 70%; margin-right: 5px; }
+        .swagger-link { display: block; margin-bottom: 20px; color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Secure Notes Dashboard (LF11a)</h1>
+    <a href="/docs" class="swagger-link">>>> API Dokumentation (Swagger) öffnen <<<</a>
+    
+    <div>
+        <input type="text" id="noteInput" placeholder="Neue sichere Notiz...">
+        <button onclick="addNote()">Speichern</button>
+    </div>
+
+    <div id="notesContainer">
+        <p>Lade Notizen...</p>
+    </div>
+
+    <script>
+        // Logindaten für Demo-Zwecke (normalerweise Session-Management)
+        const headers = { 'Authorization': 'Basic ' + btoa('admin:secret'), 'Content-Type': 'application/json' };
+
+        async function fetchNotes() {
+            const res = await fetch('/notes', { headers });
+            const notes = await res.json();
+            const container = document.getElementById('notesContainer');
+            container.innerHTML = notes.map(n => `<div class="note">${n.content}</div>`).join('') || '<p>Keine Notizen vorhanden.</p>';
+        }
+
+        async function addNote() {
+            const content = document.getElementById('noteInput').value;
+            if (!content) return;
+            await fetch('/notes', { method: 'POST', headers, body: JSON.stringify({ content }) });
+            document.getElementById('noteInput').value = '';
+            fetchNotes();
+        }
+
+        fetchNotes();
+    </script>
+</body>
+</html>
