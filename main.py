@@ -39,27 +39,57 @@ def get_db():
             tags TEXT
         )
     """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sessions (
+            token TEXT PRIMARY KEY,
+            user TEXT,
+            expires_at DATETIME
+        )
+    """)
     return conn
 
-# Authentifizierung via Salted-Hashing (Schutz vor Plaintext-Exposure)
-def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    user_record = USER_DB.get(credentials.username)
+# Neue Authentifizierungs-Logik (Session-Tokens statt Basic Auth)
+from fastapi.security import APIKeyHeader
+session_scheme = APIKeyHeader(name="X-Session-Token")
+
+def authenticate(token: str = Depends(session_scheme), db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("SELECT user FROM sessions WHERE token = ?", (token,))
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session abgelaufen oder ungültig",
+        )
+    return row[0]
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+@app.post("/login", tags=["Auth"])
+def login(auth: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
+    user_record = USER_DB.get(auth.username)
     if not user_record:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültige Anmeldedaten",
-            headers={"WWW-Authenticate": "Basic"},
-        )
+        raise HTTPException(status_code=401, detail="Falsche Anmeldedaten")
     
-    # Passwort-Verifizierung mit Salt
-    input_hash = hashlib.sha256((credentials.password + user_record["salt"]).encode()).hexdigest()
+    input_hash = hashlib.sha256((auth.password + user_record["salt"]).encode()).hexdigest()
     if not secrets.compare_digest(input_hash, user_record["hashed_password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Ungültige Anmeldedaten",
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
+        raise HTTPException(status_code=401, detail="Falsche Anmeldedaten")
+    
+    # Session Token generieren (sichere Zufallsfolge)
+    token = secrets.token_urlsafe(32)
+    cursor = db.cursor()
+    cursor.execute("INSERT INTO sessions (token, user) VALUES (?, ?)", (token, auth.username))
+    db.commit()
+    return {"token": token, "user": auth.username}
+
+@app.post("/logout", tags=["Auth"])
+def logout(token: str = Depends(session_scheme), db: sqlite3.Connection = Depends(get_db)):
+    cursor = db.cursor()
+    cursor.execute("DELETE FROM sessions WHERE token = ?", (token,))
+    db.commit()
+    return {"message": "Abgemeldet"}
 
 class NoteCreate(BaseModel):
     content: str

@@ -21,7 +21,20 @@
     </style>
 </head>
 <body>
-    <div class="container">
+    <div id="loginSection" class="container" style="max-width: 400px; margin-top: 100px;">
+        <h1>Secure Login</h1>
+        <div style="display: flex; flex-direction: column; gap: 15px;">
+            <input type="text" id="username" placeholder="Benutzername (admin)">
+            <input type="password" id="password" placeholder="Passwort (secret)">
+            <button onclick="login()">Anmelden</button>
+            <p id="loginError" style="color: #e74c3c; font-size: 0.9em; display: none;">Falsche Anmeldedaten!</p>
+        </div>
+    </div>
+
+    <div id="mainSection" class="container" style="display: none;">
+        <div style="float: right;">
+            <button onclick="logout()" class="delete-btn">Abmelden</button>
+        </div>
         <h1>Secure Notes Enterprise</h1>
         <a href="/docs" class="swagger-link">View API Documentation (Swagger)</a>
         
@@ -45,15 +58,54 @@
     </div>
 
     <script>
-        const headers = { 'Authorization': 'Basic ' + btoa('admin:secret'), 'Content-Type': 'application/json' };
+        let sessionToken = localStorage.getItem('sessionToken');
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                sessionToken = data.token;
+                localStorage.setItem('sessionToken', sessionToken);
+                showDashboard();
+            } else {
+                document.getElementById('loginError').style.display = 'block';
+            }
+        }
+
+        function logout() {
+            fetch('/logout', { 
+                method: 'POST', 
+                headers: { 'X-Session-Token': sessionToken } 
+            });
+            localStorage.removeItem('sessionToken');
+            location.reload();
+        }
+
+        function showDashboard() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('mainSection').style.display = 'block';
+            fetchNotes();
+        }
 
         async function fetchNotes() {
             const query = document.getElementById('searchInput').value;
             const url = query ? `/notes?q=${encodeURIComponent(query)}` : '/notes';
             
-            const res = await fetch(url, { headers });
-            const notes = await res.json();
+            const res = await fetch(url, { 
+                headers: { 'X-Session-Token': sessionToken } 
+            });
+
+            if (res.status === 401) return logout();
             
+            const notes = await res.json();
             const container = document.getElementById('notesContainer');
             container.innerHTML = notes.map(n => `
                 <div class="note">
@@ -69,7 +121,7 @@
         }
 
         async function updateStats() {
-            const res = await fetch('/stats', { headers });
+            const res = await fetch('/stats', { headers: { 'X-Session-Token': sessionToken } });
             const stats = await res.json();
             document.getElementById('stats').innerText = `Gesamt: ${stats.total_notes} Notizen | User: ${stats.user}`;
         }
@@ -80,7 +132,7 @@
             if (!content) return;
             await fetch('/notes', { 
                 method: 'POST', 
-                headers, 
+                headers: { 'X-Session-Token': sessionToken, 'Content-Type': 'application/json' }, 
                 body: JSON.stringify({ content, tags }) 
             });
             document.getElementById('noteInput').value = '';
@@ -89,11 +141,17 @@
 
         async function deleteNote(id) {
             if (!confirm('Soll diese Notiz wirklich sicher gelöscht werden?')) return;
-            await fetch(`/notes/${id}`, { method: 'DELETE', headers });
+            await fetch(`/notes/${id}`, { 
+                method: 'DELETE', 
+                headers: { 'X-Session-Token': sessionToken } 
+            });
             fetchNotes();
         }
 
-        fetchNotes();
+        // Check login status on load
+        if (sessionToken) {
+            showDashboard();
+        }
     </script>
 </body>
 </html>
