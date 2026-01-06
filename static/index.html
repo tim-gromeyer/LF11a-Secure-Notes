@@ -4,53 +4,91 @@
     <meta charset="UTF-8">
     <title>Secure Notes Dashboard - LF11a</title>
     <style>
-        body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; line-height: 1.6; }
-        .note { border: 1px solid #ccc; padding: 10px; margin: 10px 0; border-radius: 5px; background: #f9f9f9; }
-        h1 { color: #2c3e50; }
-        button { background: #3498db; color: white; border: none; padding: 10px; cursor: pointer; border-radius: 3px; }
-        input { padding: 10px; width: 70%; margin-right: 5px; }
-        .swagger-link { display: block; margin-bottom: 20px; color: #27ae60; font-weight: bold; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; line-height: 1.6; background-color: #f4f7f6; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .note { border-left: 5px solid #3498db; padding: 15px; margin: 15px 0; background: #fff; border-radius: 0 5px 5px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .note-meta { font-size: 0.8em; color: #7f8c8d; margin-top: 5px; }
+        .tag { display: inline-block; background: #ecf0f1; padding: 2px 8px; border-radius: 10px; font-size: 0.8em; color: #2980b9; }
+        h1 { color: #2c3e50; text-align: center; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        input, select { padding: 12px; border: 1px solid #ddd; border-radius: 4px; flex-grow: 1; }
+        button { background: #3498db; color: white; border: none; padding: 12px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: background 0.3s; }
+        button:hover { background: #2980b9; }
+        .delete-btn { background: #e74c3c; padding: 5px 10px; }
+        .delete-btn:hover { background: #c0392b; }
+        .search-box { margin-bottom: 20px; width: 100%; display: flex; }
+        .swagger-link { display: block; text-align: center; margin-bottom: 20px; color: #27ae60; text-decoration: none; font-weight: bold; }
     </style>
 </head>
 <body>
-    <h1>Secure Notes Dashboard (LF11a)</h1>
-    <a href="/docs" class="swagger-link">>>> API Dokumentation (Swagger) öffnen <<<</a>
-    
-    <div>
-        <input type="text" id="noteInput" placeholder="Neue sichere Notiz...">
-        <button onclick="addNote()">Speichern</button>
-    </div>
+    <div class="container">
+        <h1>Secure Notes Enterprise</h1>
+        <a href="/docs" class="swagger-link">View API Documentation (Swagger)</a>
+        
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Notizen durchsuchen..." onkeyup="fetchNotes()">
+        </div>
 
-    <div id="notesContainer">
-        <p>Lade Notizen...</p>
+        <div class="controls">
+            <input type="text" id="noteInput" placeholder="Inhalt der Notiz...">
+            <select id="tagInput">
+                <option value="Privat">Privat</option>
+                <option value="Arbeit">Arbeit</option>
+                <option value="Wichtig">Wichtig</option>
+                <option value="Idee">Idee</option>
+            </select>
+            <button onclick="addNote()">Hinzufügen</button>
+        </div>
+
+        <div id="stats" style="text-align: right; font-size: 0.9em; color: #7f8c8d; margin-bottom: 10px;"></div>
+        <div id="notesContainer"></div>
     </div>
 
     <script>
-        // Logindaten für Demo-Zwecke (normalerweise Session-Management)
         const headers = { 'Authorization': 'Basic ' + btoa('admin:secret'), 'Content-Type': 'application/json' };
 
         async function fetchNotes() {
-            const res = await fetch('/notes', { headers });
+            const query = document.getElementById('searchInput').value;
+            const url = query ? `/notes?q=${encodeURIComponent(query)}` : '/notes';
+            
+            const res = await fetch(url, { headers });
             const notes = await res.json();
+            
             const container = document.getElementById('notesContainer');
             container.innerHTML = notes.map(n => `
                 <div class="note">
-                    ${n.content} 
-                    <button onclick="deleteNote(${n.id})" style="float: right; background: #e74c3c; padding: 5px;">Löschen</button>
-                    <div style="clear: both;"></div>
-                </div>`).join('') || '<p>Keine Notizen vorhanden.</p>';
+                    <button onclick="deleteNote(${n.id})" class="delete-btn" style="float: right;">Löschen</button>
+                    <div>${n.content}</div>
+                    <div class="note-meta">
+                        <span class="tag">${n.tags}</span> | 
+                        🕒 ${n.created_at} | 👤 ${n.user}
+                    </div>
+                </div>`).join('') || '<p style="text-align:center;">Keine Notizen gefunden.</p>';
+            
+            updateStats();
+        }
+
+        async function updateStats() {
+            const res = await fetch('/stats', { headers });
+            const stats = await res.json();
+            document.getElementById('stats').innerText = `Gesamt: ${stats.total_notes} Notizen | User: ${stats.user}`;
         }
 
         async function addNote() {
             const content = document.getElementById('noteInput').value;
+            const tags = document.getElementById('tagInput').value;
             if (!content) return;
-            await fetch('/notes', { method: 'POST', headers, body: JSON.stringify({ content }) });
+            await fetch('/notes', { 
+                method: 'POST', 
+                headers, 
+                body: JSON.stringify({ content, tags }) 
+            });
             document.getElementById('noteInput').value = '';
             fetchNotes();
         }
 
         async function deleteNote(id) {
-            if (!confirm('Wirklich löschen?')) return;
+            if (!confirm('Soll diese Notiz wirklich sicher gelöscht werden?')) return;
             await fetch(`/notes/${id}`, { method: 'DELETE', headers });
             fetchNotes();
         }

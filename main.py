@@ -18,7 +18,15 @@ security = HTTPBasic()
 # Datenbank Initialisierung
 def get_db():
     conn = sqlite3.connect("notes.db", check_same_thread=False)
-    conn.execute("CREATE TABLE IF NOT EXISTS notes (id INTEGER PRIMARY KEY, content TEXT, user TEXT)")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY, 
+            content TEXT, 
+            user TEXT, 
+            created_at TEXT, 
+            tags TEXT
+        )
+    """)
     return conn
 
 # Authentifizierung (User: admin, Pass: secret)
@@ -33,12 +41,27 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return credentials.username
 
+from datetime import datetime
+from typing import List, Optional
+
+app = FastAPI(
+    title="Secure Notes Enterprise API",
+    description="Erweiterte sichere Notiz-Verwaltung mit Suche, Zeitstempeln und Multi-User-Support.",
+    version="1.2.0"
+)
+
+# ... (security und get_db bleiben gleich)
+
 class NoteCreate(BaseModel):
     content: str
+    tags: Optional[str] = "Allgemein"
 
 class Note(BaseModel):
     id: int
     content: str
+    user: str
+    created_at: str
+    tags: Optional[str]
 
 @app.get("/", include_in_schema=False)
 async def read_index():
@@ -46,18 +69,49 @@ async def read_index():
 
 @app.post("/notes", response_model=Note, tags=["Notizen"])
 def create_note(note: NoteCreate, user: str = Depends(authenticate), db: sqlite3.Connection = Depends(get_db)):
-    """Erstellt eine neue verschlüsselte Notiz für den angemeldeten Benutzer."""
+    """Erstellt eine neue Notiz mit Zeitstempel und Tags."""
+    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cursor = db.cursor()
-    cursor.execute("INSERT INTO notes (content, user) VALUES (?, ?)", (note.content, user))
+    cursor.execute(
+        "INSERT INTO notes (content, user, created_at, tags) VALUES (?, ?, ?, ?)", 
+        (note.content, user, created_at, note.tags)
+    )
     db.commit()
-    return {"id": cursor.lastrowid, "content": note.content}
+    return {
+        "id": cursor.lastrowid, 
+        "content": note.content, 
+        "user": user, 
+        "created_at": created_at,
+        "tags": note.tags
+    }
 
 @app.get("/notes", response_model=List[Note], tags=["Notizen"])
-def get_notes(user: str = Depends(authenticate), db: sqlite3.Connection = Depends(get_db)):
-    """Gibt alle Notizen des aktuellen Benutzers zurück."""
+def get_notes(
+    q: Optional[str] = None, 
+    user: str = Depends(authenticate), 
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """Gibt Notizen zurück, optional gefiltert nach Suchbegriff 'q'."""
     cursor = db.cursor()
-    cursor.execute("SELECT id, content FROM notes WHERE user = ?", (user,))
-    return [{"id": row[0], "content": row[1]} for row in cursor.fetchall()]
+    if q:
+        query = "SELECT id, content, user, created_at, tags FROM notes WHERE user = ? AND (content LIKE ? OR tags LIKE ?)"
+        cursor.execute(query, (user, f"%{q}%", f"%{q}%"))
+    else:
+        query = "SELECT id, content, user, created_at, tags FROM notes WHERE user = ?"
+        cursor.execute(query, (user,))
+    
+    return [
+        {"id": row[0], "content": row[1], "user": row[2], "created_at": row[3], "tags": row[4]} 
+        for row in cursor.fetchall()
+    ]
+
+@app.get("/stats", tags=["Administration"])
+def get_stats(user: str = Depends(authenticate), db: sqlite3.Connection = Depends(get_db)):
+    """Gibt Statistiken über die eigenen Notizen zurück."""
+    cursor = db.cursor()
+    cursor.execute("SELECT COUNT(*) FROM notes WHERE user = ?", (user,))
+    count = cursor.fetchone()[0]
+    return {"user": user, "total_notes": count, "system_status": "Secure"}
 
 @app.delete("/notes/{note_id}", tags=["Notizen"])
 def delete_note(note_id: int, user: str = Depends(authenticate), db: sqlite3.Connection = Depends(get_db)):
