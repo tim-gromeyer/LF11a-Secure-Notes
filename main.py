@@ -1,19 +1,31 @@
+import sqlite3
+import secrets
+import hashlib
+from datetime import datetime
+from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import sqlite3
-import secrets
 from pydantic import BaseModel
-from typing import List
 
 app = FastAPI(
-    title="Secure Notes API (LF11a Edition)",
-    description="Sichere Notiz-Verwaltung mit integrierter Swagger-Dokumentation und Basic-Frontend.",
-    version="1.1.0"
+    title="Secure Notes Enterprise API",
+    description="Sichere Notiz-Verwaltung mit Suche, Zeitstempeln und Multi-User-Support für LF11a.",
+    version="1.3.0"
 )
 
 security = HTTPBasic()
+
+# Passwort für 'admin' ist 'secret'.
+# Hier simulieren wir eine Benutzer-DB mit Salted SHA-256 Hashes.
+# In einer Produktiv-Umgebung käme dies aus einer DB-Tabelle 'users'.
+USER_DB = {
+    "admin": {
+        "salt": "lf11a_salt_demo",
+        "hashed_password": hashlib.sha256(("secret" + "lf11a_salt_demo").encode()).hexdigest()
+    }
+}
 
 # Datenbank Initialisierung
 def get_db():
@@ -29,28 +41,25 @@ def get_db():
     """)
     return conn
 
-# Authentifizierung (User: admin, Pass: secret)
+# Authentifizierung via Salted-Hashing (Schutz vor Plaintext-Exposure)
 def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
-    correct_username = secrets.compare_digest(credentials.username, "admin")
-    correct_password = secrets.compare_digest(credentials.password, "secret")
-    if not (correct_username and correct_password):
+    user_record = USER_DB.get(credentials.username)
+    if not user_record:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Ungültige Anmeldedaten",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    
+    # Passwort-Verifizierung mit Salt
+    input_hash = hashlib.sha256((credentials.password + user_record["salt"]).encode()).hexdigest()
+    if not secrets.compare_digest(input_hash, user_record["hashed_password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Ungültige Anmeldedaten",
             headers={"WWW-Authenticate": "Basic"},
         )
     return credentials.username
-
-from datetime import datetime
-from typing import List, Optional
-
-app = FastAPI(
-    title="Secure Notes Enterprise API",
-    description="Erweiterte sichere Notiz-Verwaltung mit Suche, Zeitstempeln und Multi-User-Support.",
-    version="1.2.0"
-)
-
-# ... (security und get_db bleiben gleich)
 
 class NoteCreate(BaseModel):
     content: str
@@ -70,7 +79,7 @@ async def read_index():
 @app.post("/notes", response_model=Note, tags=["Notizen"])
 def create_note(note: NoteCreate, user: str = Depends(authenticate), db: sqlite3.Connection = Depends(get_db)):
     """Erstellt eine neue Notiz mit Zeitstempel und Tags."""
-    created_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    created_at = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
     cursor = db.cursor()
     cursor.execute(
         "INSERT INTO notes (content, user, created_at, tags) VALUES (?, ?, ?, ?)", 
@@ -115,14 +124,13 @@ def get_stats(user: str = Depends(authenticate), db: sqlite3.Connection = Depend
 
 @app.delete("/notes/{note_id}", tags=["Notizen"])
 def delete_note(note_id: int, user: str = Depends(authenticate), db: sqlite3.Connection = Depends(get_db)):
-    """Löscht eine Notiz, sofern sie dem angemeldeten Benutzer gehört (Berechtigungsprüfung)."""
+    """Löscht eine Notiz, sofern sie dem angemeldeten Benutzer gehört."""
     cursor = db.cursor()
-    # WICHTIG: Prüfung auf 'user', damit niemand fremde Notizen löscht!
     cursor.execute("DELETE FROM notes WHERE id = ? AND user = ?", (note_id, user))
     if cursor.rowcount == 0:
         raise HTTPException(status_code=404, detail="Notiz nicht gefunden oder keine Berechtigung")
     db.commit()
     return {"status": "success", "message": f"Notiz {note_id} gelöscht"}
 
-# Statische Dateien (Frontend) mounten
+# Statische Dateien mounten
 app.mount("/static", StaticFiles(directory="static"), name="static")
