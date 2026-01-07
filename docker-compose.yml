@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+      - /app/venv # Prevent overwriting the host venv if it exists
+    environment:
+      - ENV=dev
+    restart: always
