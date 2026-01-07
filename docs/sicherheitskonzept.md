@@ -4,9 +4,10 @@ Dieses Dokument beschreibt die detaillierten Sicherheitsmechanismen, die in der 
 
 ## 1. Identitäts- und Zugriffsbeschränkung (IAM)
 
-### Authentifizierung
-Die Anwendung nutzt **HTTP Basic Authentication**. Der Zugriff auf sensible Endpunkte (`/notes`) ist nur mit gültigen Anmeldedaten möglich.
-- **Sicherheitsmerkmal:** Verwendung von `secrets.compare_digest`. Dies verhindert **Timing-Attacks**, bei denen Angreifer durch Messung der Antwortzeit Rückschlüsse auf die Korrektheit einzelner Zeichen des Passworts ziehen könnten.
+### Authentifizierung & Passwort-Schutz
+Die Anwendung nutzt ein **Session-Token-Verfahren** in Kombination mit einem modernen Hashing-Verfahren.
+- **Salted SHA-256 Hashing:** Passwörter werden niemals im Klartext gespeichert oder verglichen. Stattdessen wird jedem Passwort ein eindeutiger "Salt" hinzugefügt, bevor es gehasht wird. Dies schützt vor **Rainbow-Table-Angriffen**.
+- **Sicherheitsmerkmal:** Verwendung von `secrets.compare_digest` für den Hash-Vergleich. Dies verhindert **Timing-Attacks**.
 
 ### Autorisierung (Ownership-Prinzip)
 Es wird eine strikte Trennung der Benutzerdaten erzwungen.
@@ -29,19 +30,21 @@ Durch den Einsatz von **Pydantic** in FastAPI werden alle eingehenden JSON-Paylo
 Obwohl im lokalen Entwicklungsmodus HTTP verwendet wird, ist das System für den Betrieb hinter einem Reverse-Proxy (z. B. Nginx oder Traefik) mit **TLS 1.3** konzipiert.
 - **HSTS (HTTP Strict Transport Security):** In der Produktionskonfiguration wird HSTS empfohlen, um Downgrade-Angriffe zu verhindern.
 
-### Passwort-Hashing (Ausblick)
-Im aktuellen Prototyp werden Passwörter im Speicher verglichen. Für die produktive Version ist die Integration von **Argon2** oder **bcrypt** zur sicheren Speicherung von Passwort-Hashes in der Datenbank vorgesehen.
+## 4. Infrastruktur-Sicherheit (Docker & Alpine)
 
-## 4. Sicherheit im Entwicklungsprozess (DevSecOps)
+Die Anwendung wird in einem Docker-Container bereitgestellt, wobei **Alpine Linux** als Basis-Image dient.
+- **Reduzierte Angriffsfläche:** Alpine ist eine extrem schlanke Distribution (ca. 5MB), die nur die absolut notwendigen Pakete enthält. Dies minimiert die Anzahl potenzieller Schwachstellen (CVEs) im Betriebssystem des Containers.
+- **Isolation:** Der Container isoliert die Anwendung vom Host-System, was die Ausbreitung von Angriffen erschwert.
+
+## 5. Sicherheit im Entwicklungsprozess (DevSecOps)
 
 ### Automatisierte Tests
 Jeder Sicherheits-Endpunkt wird durch Unit-Tests in `test_main.py` geprüft.
-- **Testszenarien:** Erfolgreiche Anmeldung, Abgebrochene Anmeldung (401 Unauthorized), Zugriff auf nicht existierende Ressourcen.
 
 ### CI-Pipeline (GitHub Actions)
 Durch die integrierte CI-Pipeline wird sichergestellt, dass keine Code-Änderungen übernommen werden, die die bestehenden Sicherheitstests verletzen.
 
-## 5. Infrastruktur-Härtung (BSI-Konformität)
+## 6. Infrastruktur-Härtung (BSI-Konformität)
 
 Basierend auf den BSI-Grundschutz-Bausteinen werden folgende Maßnahmen für das Hosting empfohlen:
 - **Firewall:** Restriktive Regeln (nur Port 443 offen).
