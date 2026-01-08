@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Secure Notes Enterprise - Professional Edition</title>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/static/vendor/marked.min.js"></script>
     <style>
         body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; line-height: 1.6; background-color: #f0f2f5; color: #1c1e21; }
         .container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
@@ -79,7 +79,13 @@
         </div>
         
         <div id="notesView">
-            <h1 id="editorTitle">Neue sichere Notiz</h1>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h1 id="editorTitle">Neue sichere Notiz</h1>
+                <button onclick="exportData()" class="edit-btn">
+                    <svg class="icon" viewBox="0 0 24 24"><path d="M14,2L20,8V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2H14M18,20V9H13V4H6V20H18M12,19L8,15H10.5V11H13.5V15H16L12,19Z"/></svg>
+                    Exportieren (JSON)
+                </button>
+            </div>
             <div class="note-editor">
                 <input type="hidden" id="editNoteId">
                 <input type="text" id="noteTitle" placeholder="Überschrift der Notiz...">
@@ -90,7 +96,14 @@
                     <button onclick="insertMD('- [ ] ', '')">Checkliste</button>
                     <button onclick="insertMD('```\n', '\n```')">Code</button>
                 </div>
-                <textarea id="noteContent" placeholder="Inhalt (Markdown unterstützt)..."></textarea>
+                
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:20px;">
+                    <textarea id="noteContent" placeholder="Inhalt (Markdown unterstützt)..." oninput="updatePreview()"></textarea>
+                    <div id="livePreview" style="padding:12px; border:1px solid #eee; border-radius:6px; background:#fafafa; overflow-y:auto; max-height:300px; font-size:0.9em; color:#444;">
+                        <p style="color:#999; font-style:italic;">Live-Vorschau...</p>
+                    </div>
+                </div>
+
                 <div class="controls-row">
                     <select id="tagInput">
                         <option value="Allgemein">Allgemein</option>
@@ -129,6 +142,9 @@
                     <tbody id="logsContainer"></tbody>
                 </table>
             </div>
+
+            <h1 style="margin-top:40px;">Registrierte Benutzer</h1>
+            <div id="userListContainer" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
         </div>
     </div>
 
@@ -146,10 +162,8 @@
             const toggle = document.getElementById('authToggle');
             const error = document.getElementById('loginError');
             const success = document.getElementById('registerSuccess');
-            
             error.style.display = 'none';
             success.style.display = 'none';
-            
             if (isLoginMode) {
                 title.innerText = "Secure Login";
                 btn.innerText = "Anmelden";
@@ -162,11 +176,7 @@
         }
 
         async function handleAuth() {
-            if (isLoginMode) {
-                await login();
-            } else {
-                await register();
-            }
+            if (isLoginMode) await login(); else await register();
         }
 
         async function register() {
@@ -216,9 +226,7 @@
         function showDashboard() {
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('mainSection').style.display = 'block';
-            if (currentUser === 'admin') {
-                document.getElementById('adminControls').style.display = 'block';
-            }
+            if (currentUser === 'admin') document.getElementById('adminControls').style.display = 'block';
             fetchNotes();
         }
 
@@ -232,6 +240,7 @@
                 adminView.style.display = 'block';
                 btn.innerText = "Zurück zu Notizen";
                 fetchLogs();
+                fetchUsers();
             } else {
                 notesView.style.display = 'block';
                 adminView.style.display = 'none';
@@ -240,12 +249,17 @@
             }
         }
 
+        async function fetchUsers() {
+            const res = await fetch('/admin/users', { headers: { 'X-Session-Token': sessionToken } });
+            const users = await res.json();
+            document.getElementById('userListContainer').innerHTML = users.map(u => `<span class="tag">👤 ${u.username}</span>`).join('');
+        }
+
         async function fetchLogs() {
             const res = await fetch('/admin/logs', { headers: { 'X-Session-Token': sessionToken } });
             if (res.status === 401) return logout();
             const logs = await res.json();
-            const container = document.getElementById('logsContainer');
-            container.innerHTML = logs.map(l => `
+            document.getElementById('logsContainer').innerHTML = logs.map(l => `
                 <tr>
                     <td>${l.timestamp}</td>
                     <td><strong>${l.user}</strong></td>
@@ -255,12 +269,30 @@
             `).join('');
         }
 
+        function updatePreview() {
+            const content = document.getElementById('noteContent').value;
+            document.getElementById('livePreview').innerHTML = content ? marked.parse(content) : '<p style="color:#999; font-style:italic;">Live-Vorschau...</p>';
+        }
+
+        async function exportData() {
+            const res = await fetch('/export', { headers: { 'X-Session-Token': sessionToken } });
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `notes_export_${currentUser}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
         function insertMD(before, after) {
             const area = document.getElementById('noteContent');
             const start = area.selectionStart;
             const end = area.selectionEnd;
             area.value = area.value.substring(0, start) + before + area.value.substring(start, end) + after + area.value.substring(end);
             area.focus();
+            updatePreview();
         }
 
         async function fetchNotes() {
@@ -337,6 +369,7 @@
             document.getElementById('saveBtn').innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg> Änderungen speichern';
             document.getElementById('cancelBtn').style.display = "block";
             window.scrollTo(0, 0);
+            updatePreview();
         }
 
         function cancelEdit() {
@@ -346,6 +379,7 @@
             document.getElementById('editorTitle').innerText = "Neue sichere Notiz";
             document.getElementById('saveBtn').innerHTML = '<svg class="icon" viewBox="0 0 24 24"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg> Sicher Speichern';
             document.getElementById('cancelBtn').style.display = "none";
+            updatePreview();
         }
 
         async function saveNote() {
