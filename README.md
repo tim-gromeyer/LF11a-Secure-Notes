@@ -1,31 +1,41 @@
-# Praxisprojekt LF11b: Secure Notes API
+# Praxisprojekt LF11a: Secure Notes Enterprise
 
-Ein praxisorientiertes Backend-Projekt zur Erfüllung der Lernfeld 11b (LF11b) Anforderungen, mit starkem Fokus auf IT-Sicherheit, Schutzbedarfsanalyse und BSI-Grundschutz.
+Ein hochsicheres Fullstack-Projekt zur Erfüllung der Lernfeld 11a Anforderungen, mit Fokus auf IT-Sicherheit, BSI-konforme Schutzbedarfsanalyse und moderne DevSecOps-Workflows.
 
-## Features
-- REST-API mit Python (FastAPI)
-- Integrierte API-Dokumentation (OpenAPI/Swagger unter `/docs`)
-- Authentifizierung über HTTP Basic Auth
-- SQLite-Datenbank (sicher gegen SQL-Injections)
-- Unit-Tests & CI-Pipeline (GitHub Actions)
-- Umfassende Markdown-Dokumentation (Schutzbedarf, BSI-Bausteine, UML)
+## Key Features
+- **Sichere Authentifizierung:** Salted SHA-256 Hashing und DB-gestütztes Session-Token-Management.
+- **Revisionssicherheit:** Lückenloses Audit-Logging aller sicherheitsrelevanten Aktionen.
+- **Offline-First:** Vollständig lokale Bereitstellung von Bibliotheken (Swagger UI, Marked.js) für maximalen Datenschutz.
+- **Interaktives Frontend:** Modernes Dashboard mit Live-Markdown-Vorschau und Echtzeit-Synchronisation.
+- **Datenportabilität:** Integrierte Export-Funktion (JSON) gemäß DSGVO-Standards.
+- **Infrastruktur:** Containerisierung via Docker (Alpine Linux) und lokales HTTPS/TLS Setup.
+
+## Projektstruktur
+- `app/`: Modulare Backend-Logik (FastAPI, Auth, Database).
+- `static/`: Modernes Frontend und lokal gehostete Vendor-Assets.
+- `docs/`: Umfassende Dokumentation (BSI, Risikoanalyse, Tagebuch).
+- `tests/`: Automatisierte Sicherheits- und Funktionstests (Pytest).
 
 ## Starten
 
-1. Abhängigkeiten installieren:
+1. **Mit Docker (empfohlen):**
+   ```bash
+   docker-compose up --build
+   ```
+   Die API ist unter `https://localhost:8000` erreichbar.
+
+2. **Manuell (Lokal):**
    ```bash
    pip install -r requirements.txt
+   uvicorn app.main:app --reload --ssl-keyfile key.pem --ssl-certfile cert.pem
    ```
-2. Server starten:
-   ```bash
-   uvicorn main:app --reload
-   ```
-3. API aufrufen unter `http://127.0.0.1:8000/docs`. (User: `admin`, Pass: `secret`)
-
-## Tests ausführen
-```bash
-pytest test_main.py
-```
+3. **API-Dokumentation:** `https://localhost:8000/docs`.
 
 ## Dokumentation
-Alle relevanten Planungs- und Security-Dokumente befinden sich im Verzeichnis [`docs/`](./docs/). Die Präsentation liegt als [`praesentation.md`](./praesentation.md) bei (kann z.B. mit Marp gerendert werden oder einfach als Markdown betrachtet werden).
+Alle Planungs- und Security-Dokumente befinden sich im Verzeichnis [`docs/`](./docs/):
+- [Schutzbedarfsanalyse](./docs/schutzbedarfsanalyse.md)
+- [Sicherheitskonzept](./docs/sicherheitskonzept.md)
+- [Risikoanalyse](./docs/risikoanalyse.md)
+- [Methodik & KI-Nutzung](./docs/methodik.md)
+- [Projekttagebuch](./docs/projekttagebuch.md)
+- [Präsentation (Marp/Markdown)](./docs/praesentation.md)

@@ -1,20 +1,45 @@
-# Schutzbedarfsanalyse "Secure Notes API"
+# Schutzbedarfsanalyse & Risikoanalyse (LF11a)
 
-Gemäß BSI-Standard 200-2 wurde eine Schutzbedarfsanalyse für die Secure Notes API durchgeführt. Das System speichert und verarbeitet potenziell sensible Notizen von Benutzern.
+## 1. Schutzbedarfsanalyse (BSI 200-2)
 
-## 1. Schutzziele
+Das System "Secure Notes Enterprise" wurde nach den Kriterien des BSI-Grundschutzes bewertet.
 
-- **Vertraulichkeit**: Hoch (Sensible Daten dürfen nicht in fremde Hände gelangen).
-- **Integrität**: Hoch (Notizen dürfen nicht unbemerkt manipuliert werden).
-- **Verfügbarkeit**: Normal (Kurze Ausfälle der API sind tolerierbar, aber kein Datenverlust).
+| Objekt | Vertraulichkeit | Integrität | Verfügbarkeit |
+| :--- | :---: | :---: | :---: |
+| **Benutzer-Notizen** | HOCH | HOCH | NORMAL |
+| **Authentifizierungs-Daten** | SEHR HOCH | HOCH | HOCH |
+| **API-Infrastruktur** | NORMAL | HOCH | NORMAL |
 
-## 2. Feststellung des Schutzbedarfs
+**Begründung:**
+- **Vertraulichkeit:** Da Notizen private oder geschäftliche Geheimnisse enthalten können, ist der Schutz vor unbefugter Einsicht kritisch (HOCH).
+- **Integrität:** Eine unbemerkte Änderung von Notizen könnte fatale Folgen haben (z. B. falsche Passwörter oder Anweisungen) (HOCH).
+- **Verfügbarkeit:** Ein kurzzeitiger Ausfall ist für den Nutzer ärgerlich, aber nicht geschäftskritisch (NORMAL).
 
-### Anwendung (Secure Notes API)
-Die API-Komponenten verarbeiten sensible Informationen, daher vererbt sich der Schutzbedarf der Daten (Hoch) auf die Anwendung. Ein Ausfall (Verfügbarkeit) ist nur "Normal", aber die Integrität und Vertraulichkeit erfordern einen **hohen** Schutzbedarf.
+## 2. Risikoanalyse
 
-### IT-System (Server/Backend)
-Der Server, auf dem das Backend und die SQLite-Datenbank laufen, muss stark abgesichert werden. Entsprechend wird der Schutzbedarf als **Hoch** eingestuft. Maßnahmen wie OS-Härtung, Firewalls (iptables/nftables) und aktuelle TLS-Zertifikate (Let's Encrypt) sind zwingend erforderlich.
+| Bedrohung | Eintrittswahrscheinlichkeit | Auswirkung | Risiko-Stufe | Gegenmaßnahme |
+| :--- | :---: | :---: | :---: | :--- |
+| **SQL-Injection** | Mittel | Hoch | **Hoch** | Prepared Statements (aktiv) |
+| **Brute-Force Login** | Hoch | Mittel | **Mittel** | Rate Limiting & Starke Passwörter |
+| **Man-in-the-Middle** | Mittel | Hoch | **Hoch** | TLS 1.3 Verschlüsselung |
+| **Unbefugter Zugriff** | Niedrig | Hoch | **Mittel** | Horizontale Autorisierung (aktiv) |
 
-### Netz (Kommunikation)
-Da die API über das Internet erreichbar sein soll, besteht ein **hoher** Schutzbedarf für die Kommunikationstransparenz und Vertraulichkeit. Nur verschlüsselte Verbindungen über TLS 1.3 sind erlaubt.
+## 3. Technisch-organisatorische Maßnahmen (TOMs)
+
+Gemäß Art. 32 DSGVO wurden folgende Maßnahmen getroffen:
+
+### Pseudonymisierung & Verschlüsselung
+- **Transportverschlüsselung:** Einsatz von TLS für alle API-Aufrufe.
+- **Passwort-Schutz:** Passwörter werden im Backend niemals im Klartext verarbeitet (Salted Hashing).
+
+### Vertraulichkeit (Zutritt, Zugang, Zugriff)
+- **Zugangskontrolle:** Authentifizierung via DB-gestütztem Session-Management (Tokens).
+- **Zugriffskontrolle:** Rollenbasierte Autorisierung (RBAC) auf Datenbankebene durch `user`-ID Filterung.
+
+### Integrität (Weitergabe, Eingabe)
+- **Eingabekontrolle:** Validierung aller API-Anfragen durch Pydantic-Modelle.
+- **Datenträgerkontrolle:** Sicherung der SQLite-Datenbank durch Dateisystemrechte.
+
+### Verfügbarkeit & Belastbarkeit
+- **Backups:** Regelmäßige Exporte der SQLite-Datenbank.
+- **Wiederherstellbarkeit:** Automatisierte Deployment-Skripte für schnellen Wiederanlauf (CI/CD).
