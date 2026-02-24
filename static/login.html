@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anmeldung - Secure Notes Enterprise</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="flex-center-center">
+    <div class="card" style="width: 100%; max-width: 400px;">
+        <h1 class="text-center" id="authTitle">Anmeldung</h1>
+        
+        <div id="loginForm">
+            <div class="form-group">
+                <label for="username">Benutzername</label>
+                <input type="text" id="username" placeholder="z.B. admin">
+            </div>
+            <div class="form-group">
+                <label for="password">Passwort</label>
+                <input type="password" id="password" placeholder="••••••••">
+            </div>
+            <button class="btn btn-primary" style="width: 100%;" onclick="handleAuth()" id="authBtn">
+                Anmelden
+            </button>
+            <p class="text-center" style="margin-top: 1.5rem; font-size: 0.875rem;">
+                <a href="#" id="authToggle" onclick="toggleAuthMode()">Noch kein Konto? Registrieren</a>
+            </p>
+            <p id="authError" class="text-center hidden" style="color: var(--danger); margin-top: 1rem; font-weight: 600;">
+                Zugriff verweigert!
+            </p>
+            <p id="registerSuccess" class="text-center hidden" style="color: var(--success); margin-top: 1rem; font-weight: 600;">
+                Erfolgreich! Bitte jetzt anmelden.
+            </p>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        let isLoginMode = true;
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            document.getElementById('authTitle').innerText = isLoginMode ? "Anmeldung" : "Registrierung";
+            document.getElementById('authBtn').innerText = isLoginMode ? "Anmelden" : "Konto erstellen";
+            document.getElementById('authToggle').innerText = isLoginMode ? "Noch kein Konto? Registrieren" : "Bereits ein Konto? Anmelden";
+        }
+
+        async function handleAuth() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) return alert("Bitte alle Felder ausfüllen");
+
+            if (isLoginMode) {
+                await login(username, password);
+            } else {
+                const res = await API.request('/register', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (res.ok || res.status === 400) {
+                    // Falls erfolgreich registriert ODER Nutzer existiert bereits -> Login versuchen
+                    await login(username, password);
+                } else {
+                    document.getElementById('authError').classList.remove('hidden');
+                    document.getElementById('authError').innerText = "Registrierung fehlgeschlagen";
+                }
+            }
+        }
+
+        async function login(username, password) {
+            const res = await API.request('/login', {
+                method: 'POST',
+                body: JSON.stringify({ username, password })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                localStorage.setItem('sessionToken', data.token);
+                localStorage.setItem('currentUser', data.user);
+                window.location.href = '/dashboard.html';
+            } else {
+                document.getElementById('authError').classList.remove('hidden');
+                document.getElementById('authError').innerText = "Anmeldung fehlgeschlagen: Passwort falsch oder Zugriff verweigert";
+            }
+        }
+    </script>
+</body>
+</html>

@@ -48,8 +48,20 @@ async def custom_swagger_ui_html():
     )
 
 @app.get("/", include_in_schema=False)
-async def read_index():
-    return FileResponse('static/index.html')
+async def read_root():
+    return FileResponse('static/login.html')
+
+@app.get("/login.html", include_in_schema=False)
+async def read_login():
+    return FileResponse('static/login.html')
+
+@app.get("/dashboard.html", include_in_schema=False)
+async def read_dashboard():
+    return FileResponse('static/dashboard.html')
+
+@app.get("/admin.html", include_in_schema=False)
+async def read_admin():
+    return FileResponse('static/admin.html')
 
 @app.post("/register", tags=["Auth"])
 def register(auth: LoginRequest, db=Depends(get_db)):

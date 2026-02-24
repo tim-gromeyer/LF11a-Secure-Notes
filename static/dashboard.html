@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Secure Notes Enterprise</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="/static/vendor/marked.min.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/dashboard.html" class="nav-brand">Secure Notes</a>
+        <div class="nav-links">
+            <a href="/dashboard.html" class="nav-link">Notizen</a>
+            <a href="/admin.html" id="adminLink" class="nav-link hidden">Verwaltung</a>
+            <button class="btn btn-ghost" onclick="API.logout()">Abmelden</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="flex justify-between items-center">
+            <h1>Meine Notizen</h1>
+            <button class="btn btn-ghost" onclick="exportData()">
+                <svg class="icon" viewBox="0 0 24 24"><path d="M14,2L20,8V20A2,2 0 0,1 18,22H6A2,2 0 0,1 4,20V4A2,2 0 0,1 6,2H14M18,20V9H13V4H6V20H18M12,19L8,15H10.5V11H13.5V15H16L12,19Z"/></svg>
+                Exportieren
+            </button>
+        </div>
+
+        <!-- Editor Card -->
+        <div class="card" style="margin-top: 1.5rem; border: 2px solid var(--primary-color);">
+            <input type="hidden" id="editNoteId">
+            <h3 id="editorTitle" style="margin-top: 0;">Neue Notiz erstellen</h3>
+            
+            <div class="form-group">
+                <input type="text" id="noteTitle" placeholder="Überschrift der Notiz...">
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; min-height: 250px;">
+                <div class="flex flex-direction-column" style="flex-direction: column; gap: 0.5rem;">
+                    <div class="flex gap-2" style="background: var(--bg-color); padding: 0.5rem; border-radius: 0.5rem 0.5rem 0 0; border: 1px solid var(--border-color); border-bottom: none;">
+                        <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem;" onclick="insertMD('**', '**')">Fett</button>
+                        <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem;" onclick="insertMD('*', '*')">Kursiv</button>
+                        <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem;" onclick="insertMD('# ', '')">H1</button>
+                        <button class="btn btn-ghost" style="padding: 0.25rem 0.5rem;" onclick="insertMD('- [ ] ', '')">Checkliste</button>
+                    </div>
+                    <textarea id="noteContent" placeholder="Inhalt (Markdown unterstützt)..." oninput="updatePreview()" style="border-radius: 0 0 0.5rem 0.5rem; flex-grow: 1; min-height: 200px; font-family: monospace;"></textarea>
+                </div>
+                <div id="livePreview" class="note-body" style="background: var(--bg-color); padding: 1rem; border-radius: 0.5rem; border: 1px solid var(--border-color); overflow-y: auto; max-height: 300px;">
+                    <p style="color: var(--text-muted); font-style: italic;">Live-Vorschau...</p>
+                </div>
+            </div>
+
+            <div class="flex justify-between items-center" style="margin-top: 1.5rem;">
+                <select id="tagInput" style="width: auto;">
+                    <option value="Allgemein">Allgemein</option>
+                    <option value="Arbeit">Arbeit</option>
+                    <option value="Privat">Privat</option>
+                    <option value="Wichtig">Wichtig</option>
+                    <option value="Idee">Idee</option>
+                </select>
+                <div class="flex gap-2">
+                    <button id="cancelBtn" class="btn btn-ghost hidden" onclick="cancelEdit()">Abbrechen</button>
+                    <button class="btn btn-primary" onclick="saveNote()">
+                        <svg class="icon" viewBox="0 0 24 24"><path d="M15,9H5V5H15M12,19A3,3 0 0,1 9,16A3,3 0 0,1 12,13A3,3 0 0,1 15,16A3,3 0 0,1 12,19M17,3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V7L17,3Z"/></svg>
+                        Sicher Speichern
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div style="margin-top: 3rem;">
+            <input type="text" id="searchInput" placeholder="Suche in Titeln, Inhalten oder Tags..." onkeyup="fetchNotes()" style="padding: 1rem; border-radius: 0.75rem;">
+        </div>
+
+        <div id="notesContainer" class="note-grid"></div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        let currentNotes = [];
+
+        async function fetchNotes() {
+            const q = document.getElementById('searchInput').value;
+            const url = q ? `/notes?q=${encodeURIComponent(q)}` : '/notes';
+            const res = await API.request(url);
+            if (!res) return;
+            currentNotes = await res.json();
+            renderNotes();
+        }
+
+        function renderNotes() {
+            const container = document.getElementById('notesContainer');
+            container.innerHTML = currentNotes.map((n, idx) => {
+                let html = marked.parse(n.content);
+                // Fix for interactive checkboxes
+                html = html.replace(/<li><input disabled="" type="checkbox">/g, `<li><input type="checkbox" onclick="toggleTask(${n.id}, ${idx}, event)">`);
+                html = html.replace(/<li><input checked="" disabled="" type="checkbox">/g, `<li><input type="checkbox" checked onclick="toggleTask(${n.id}, ${idx}, event)">`);
+
+                return `
+                <div class="note-card">
+                    <div class="note-header">
+                        <h2 class="note-title">${n.title}</h2>
+                        <div class="flex gap-2">
+                            <button class="btn btn-ghost" onclick="editNote(${idx})" title="Bearbeiten">
+                                <svg class="icon" viewBox="0 0 24 24"><path d="M20.71,7.04C21.1,6.65 21.1,6 20.71,5.63L18.37,3.29C18,2.9 17.35,2.9 16.96,3.29L15.12,5.12L18.88,8.88M3,17.25V21H6.75L17.81,9.93L14.07,6.17L3,17.25Z"/></svg>
+                            </button>
+                            <button class="btn btn-ghost" onclick="deleteNote(${n.id})" title="Löschen" style="color: var(--danger);">
+                                <svg class="icon" viewBox="0 0 24 24"><path d="M19,4H15.5L14.5,3H9.5L8.5,4H5V6H19V4M6,19A2,2 0 0,0 8,21H16A2,2 0 0,0 18,19V7H6V19Z"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="note-body">${html}</div>
+                    <div class="note-meta">
+                        <span class="tag">${n.tags}</span>
+                        <span>🕒 ${n.created_at}</span>
+                        <span>👤 ${n.user}</span>
+                    </div>
+                </div>`;
+            }).join('') || '<p class="text-center" style="color: var(--text-muted);">Keine Notizen gefunden.</p>';
+        }
+
+        async function saveNote() {
+            const id = document.getElementById('editNoteId').value;
+            const title = document.getElementById('noteTitle').value;
+            const content = document.getElementById('noteContent').value;
+            const tags = document.getElementById('tagInput').value;
+            
+            if (!title || !content) return alert("Bitte Titel und Inhalt ausfüllen!");
+            
+            const method = id ? 'PUT' : 'POST';
+            const url = id ? `/notes/${id}` : '/notes';
+
+            await API.request(url, { 
+                method, 
+                body: JSON.stringify({ title, content, tags }) 
+            });
+            
+            cancelEdit();
+            fetchNotes();
+        }
+
+        function editNote(idx) {
+            const n = currentNotes[idx];
+            document.getElementById('editNoteId').value = n.id;
+            document.getElementById('noteTitle').value = n.title;
+            document.getElementById('noteContent').value = n.content;
+            document.getElementById('tagInput').value = n.tags;
+            document.getElementById('editorTitle').innerText = "Notiz bearbeiten";
+            document.getElementById('cancelBtn').classList.remove('hidden');
+            window.scrollTo(0, 0);
+            updatePreview();
+        }
+
+        function cancelEdit() {
+            document.getElementById('editNoteId').value = "";
+            document.getElementById('noteTitle').value = "";
+            document.getElementById('noteContent').value = "";
+            document.getElementById('editorTitle').innerText = "Neue Notiz erstellen";
+            document.getElementById('cancelBtn').classList.add('hidden');
+            updatePreview();
+        }
+
+        async function deleteNote(id) {
+            if (!confirm('Notiz unwiderruflich löschen?')) return;
+            await API.request(`/notes/${id}`, { method: 'DELETE' });
+            fetchNotes();
+        }
+
+        async function toggleTask(noteId, noteIdx, event) {
+            const note = currentNotes[noteIdx];
+            const isChecked = event.target.checked;
+            const allCheckboxes = Array.from(event.target.closest('.note-body').querySelectorAll('input[type="checkbox"]'));
+            const checkboxIndex = allCheckboxes.indexOf(event.target);
+            
+            const lines = note.content.split('\n');
+            let count = 0;
+            const newLines = lines.map(line => {
+                if (line.match(/^(\s*[-*+]\s+\[)[ xX](\].*)$/)) {
+                    if (count++ === checkboxIndex) return line.replace(/^(\s*[-*+]\s+\[)[ xX](\].*)$/, `$1${isChecked ? 'x' : ' '}$2`);
+                }
+                return line;
+            });
+            
+            const newContent = newLines.join('\n');
+            await API.request(`/notes/${noteId}`, {
+                method: 'PUT',
+                body: JSON.stringify({ title: note.title, content: newContent, tags: note.tags })
+            });
+            fetchNotes();
+        }
+
+        function updatePreview() {
+            const content = document.getElementById('noteContent').value;
+            document.getElementById('livePreview').innerHTML = content ? marked.parse(content) : '...';
+        }
+
+        function insertMD(before, after) {
+            const area = document.getElementById('noteContent');
+            const start = area.selectionStart;
+            const end = area.selectionEnd;
+            area.value = area.value.substring(0, start) + before + area.value.substring(start, end) + after + area.value.substring(end);
+            area.focus();
+            updatePreview();
+        }
+
+        async function exportData() {
+            const res = await API.request('/export');
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `notes_export_${API.getUser()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+
+        if (API.getUser() === 'admin') document.getElementById('adminLink').classList.remove('hidden');
+        fetchNotes();
+    </script>
+</body>
+</html>

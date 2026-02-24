@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verwaltung - Secure Notes Enterprise</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/dashboard.html" class="nav-brand">Secure Notes</a>
+        <div class="nav-links">
+            <a href="/dashboard.html" class="nav-link">Notizen</a>
+            <a href="/admin.html" class="nav-link">Verwaltung</a>
+            <button class="btn btn-ghost" onclick="API.logout()">Abmelden</button>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Sicherheits-Audit-Logs</h1>
+        <div class="card">
+            <div style="overflow-x:auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Zeitstempel</th>
+                            <th>Benutzer</th>
+                            <th>Aktion</th>
+                            <th>Ressource ID</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsContainer">
+                        <tr><td colspan="4" class="text-center">Lade Logs...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <h1 style="margin-top: 3rem;">Registrierte Benutzer</h1>
+        <div id="userListContainer" class="flex gap-2" style="flex-wrap: wrap; margin-top: 1rem;">
+            <!-- Benutzer werden hier geladen -->
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+    <script>
+        async function loadAdminData() {
+            if (API.getUser() !== 'admin') {
+                window.location.href = '/dashboard.html';
+                return;
+            }
+
+            // Logs laden
+            const logsRes = await API.request('/admin/logs');
+            if (logsRes && logsRes.ok) {
+                const logs = await logsRes.json();
+                document.getElementById('logsContainer').innerHTML = logs.map(l => `
+                    <tr>
+                        <td>${l.timestamp}</td>
+                        <td><strong>${l.user}</strong></td>
+                        <td>${l.action}</td>
+                        <td style="color: var(--text-muted);">${l.resource_id || '-'}</td>
+                    </tr>
+                `).join('');
+            }
+
+            // User laden
+            const usersRes = await API.request('/admin/users');
+            if (usersRes && usersRes.ok) {
+                const users = await usersRes.json();
+                document.getElementById('userListContainer').innerHTML = users.map(u => `
+                    <span class="tag">👤 ${u.username}</span>
+                `).join('');
+            }
+        }
+
+        loadAdminData();
+    </script>
+</body>
+</html>
